@@ -1,0 +1,142 @@
+<html>
+<head>
+    <script src="https://cdn.jsdelivr.net/npm/luxon@1.26.0/build/global/luxon.min.js"></script>
+
+    <script>
+        const USER_ZONE = luxon.DateTime.local().zoneName;
+        let currentTimezone;
+
+        window.onload = async () => {
+            currentTimezone = USER_ZONE;
+            document.getElementById('timezone').value = currentTimezone;
+
+            let backendDate;
+            let backendDatetime;
+
+            await fetch('date-and-datetime')
+                .then(response => response.json())
+                .then(dateAndDatetime => {
+                    backendDate = dateAndDatetime.date;
+                    backendDatetime = dateAndDatetime.datetime;
+                });
+
+            // Date does not need any timezone transformation:
+            document.getElementById('date').value = backendDate;
+
+            const {date, time} = parseIsoDatetime(backendDatetime, currentTimezone);
+            document.getElementById('datetime_date').value = date;
+            document.getElementById('datetime_time').value = time;
+
+            await updateList();
+        }
+
+        const updateTimezone = () => {
+            const timezone = document.getElementById('timezone').value;
+            const datetime_date = document.getElementById('datetime_date').value;
+            const datetime_time = document.getElementById('datetime_time').value;
+
+            const datetime = toISOString(datetime_date, datetime_time, currentTimezone);
+            const {date, time} = parseIsoDatetime(datetime, timezone);
+
+            document.getElementById('datetime_date').value = date;
+            document.getElementById('datetime_time').value = time;
+
+            currentTimezone = timezone;
+
+            updateList();
+        }
+
+        const submit = async () => {
+            // Date does not need any transformation:
+            const date = document.getElementById('date').value;
+
+            // HTML to Luxon
+            const datetime_date = document.getElementById('datetime_date').value;
+            const datetime_time = document.getElementById('datetime_time').value;
+            const datetime = toISOString(datetime_date, datetime_time, currentTimezone);
+
+            const body = {};
+            body.date = date;
+            body.datetime = datetime.toString();
+
+            await fetch('date-and-datetime', {
+                method: 'POST',
+                body: JSON.stringify(body),
+                headers:{
+                    'Content-Type': 'application/json'
+                }
+            }).then(res => res.json())
+                .catch(error => console.error('Error:', error))
+                .then(response => {});
+
+            await updateList();
+        }
+
+        const updateList = async () => {
+            let datetimesList = document.getElementById("datetimes");
+            while (datetimesList.firstChild) {
+                datetimesList.removeChild(datetimesList.firstChild);
+            }
+
+            await fetch('all')
+                .then(response => response.json())
+                .then(data => {
+                    data.forEach((dateAndDatetime) => {
+                        let li = document.createElement("li");
+                        const {date, time} = parseIsoDatetime(dateAndDatetime.datetime, currentTimezone);
+                        li.appendChild(document.createTextNode(date + ' ' + time));
+                        datetimesList.appendChild(li);
+                    });
+                });
+        }
+
+        const parseIsoDatetime = (isoDate, zone = 'local') => {
+            const datetime = luxon.DateTime.fromISO(isoDate, {zone: zone});
+
+            const dateElements = [
+                datetime.toFormat('yyyy'),
+                datetime.toFormat('MM'),
+                datetime.toFormat('dd')
+            ];
+
+            const timeElements = [
+                datetime.toFormat('HH'),
+                datetime.toFormat('mm')
+            ]
+
+            return {date: dateElements.join('-'), time: timeElements.join(":")}
+        }
+
+        const toISOString = (date, time, zone = 'local') => {
+            const datetime = luxon.DateTime.fromFormat(date + ' ' + time, 'yyyy-MM-dd HH:mm', {zone: zone});
+            return datetime.setZone('UTC').toString()
+        }
+    </script>
+</head>
+
+<body>
+<h3>Timezone</h3>
+<select id="timezone" onchange="updateTimezone();">
+    <option value="Europe/Madrid">Europe/Madrid</option>
+    <option value="Atlantic/Canary">Atlantic/Canary</option>
+    <option value="America/New_York">America/New_York</option>
+    <option value="America/Los_Angeles">America/Los_Angeles</option>
+</select>
+
+<h3>Set time</h3>
+<input type="date" id="date" />
+<br/>
+<br/>
+
+<input type="date" id="datetime_date" />
+<input type="time" id="datetime_time" />
+<br/>
+<br/>
+
+<button onclick="submit();">Submit</button>
+<br/>
+
+<h3>Stored datetimes</h3>
+<ul id="datetimes"></ul>
+</body>
+</html>
